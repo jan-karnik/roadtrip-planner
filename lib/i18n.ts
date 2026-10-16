@@ -312,6 +312,8 @@ export const t = {
     submitting: "Přihlašuji…",
     logout: "Odhlásit",
     error: "Nesprávné jméno nebo heslo.",
+    tooManyAttempts: (minutes: number) =>
+      `Příliš mnoho neúspěšných pokusů. Zkuste to znovu za ${minutes} min.`,
     notConfigured: "Přihlášení není na serveru nastaveno (AUTH_USERNAME / AUTH_PASSWORD / AUTH_SESSION_TOKEN).",
   },
   errors: {

@@ -36,6 +36,9 @@ npm run dev             # http://localhost:3000
 
 In development, log in with **`demo` / `demo`**. In production you must set
 `AUTH_USERNAME`, `AUTH_PASSWORD` and `AUTH_SESSION_TOKEN` — there are no defaults.
+Production must be served over HTTPS (the session cookie is `Secure`). Sessions last 30
+days; changing `AUTH_SESSION_TOKEN` signs everyone out. After 5 wrong passwords a client
+is locked out for 15 minutes.
 
 ## Configuration
 

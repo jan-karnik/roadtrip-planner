@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SESSION_COOKIE, sessionSecret, verifySessionValue } from "@/lib/session";
 
-const SESSION_COOKIE = "rtp.auth";
-// Keep in sync with app/actions/auth.ts. The dev fallback never applies in
-// production: an unset AUTH_SESSION_TOKEN there means nobody gets in.
-const SESSION_TOKEN =
-  process.env.AUTH_SESSION_TOKEN ||
-  (process.env.NODE_ENV === "production" ? null : "dev-session-token");
-
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === "/login") {
     return NextResponse.next();
   }
 
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (SESSION_TOKEN && token === SESSION_TOKEN) return NextResponse.next();
+  const session = request.cookies.get(SESSION_COOKIE)?.value;
+  if (await verifySessionValue(session, sessionSecret())) {
+    return NextResponse.next();
+  }
 
   // Build the redirect from the forwarded host/proto so it points at the public
   // hostname rather than the internal bind address: behind a reverse proxy,

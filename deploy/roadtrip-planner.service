@@ -1,0 +1,15 @@
+[Unit]
+Description=Roadtrip Planner (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/roadtrip-planner
+EnvironmentFile=/var/www/roadtrip-planner/.env
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 3000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

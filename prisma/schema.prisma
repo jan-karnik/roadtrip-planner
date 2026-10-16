@@ -1,0 +1,146 @@
+// Travel itinerary "mission control" — kickoff schema.
+// DB is WIP and droppable: `npm run db:reset` recreates + reseeds from scratch.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A trip / vacation container.
+model Trip {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stops    ItineraryStop[]
+  options  ItineraryOption[]
+}
+
+// NOTE: there used to be a date-keyed `Booking` model here, holding hotels
+// independently of the route. It was removed because nothing tied a booking to
+// a stop: the itinerary could claim a night in one town while the reservation
+// was 95 km away, and the schedule measured the drive to the wrong place. Accommodation now lives ON the stop (`OptionStop.isHotel`).
+
+/// A point of interest. `name` is the normalized display title (canonical form);
+/// `rawName` keeps the original user input. Coordinates power the map + distances.
+model Place {
+  id          String   @id @default(cuid())
+  rawName     String
+  name        String
+  shortName   String?
+  country     String?
+  region      String?
+  category    String   @default("poi")
+  description String?
+  lat         Float
+  lng         Float
+  osmId       String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stops ItineraryStop[]
+}
+
+/// An ordered stop in a trip's itinerary, pointing at a Place.
+/// `status` is one of PLANNED | VISITED | SKIPPED (see lib/types.ts).
+model ItineraryStop {
+  id        String   @id @default(cuid())
+  tripId    String
+  placeId   String
+  order     Int
+  dayIndex  Int?
+  nights    Int?
+  status    String   @default("PLANNED")
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trip  Trip  @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  place Place @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  // NOTE: order is unique per trip, but placeId deliberately is NOT — a round
+  // trip references the same canonical Place twice (the start, again as the
+  // final return stop). Multiple stops can share one Place.
+  @@unique([tripId, order])
+  @@index([tripId])
+  @@index([placeId])
+}
+
+/// Cached Mapbox Directions result for a single from→to leg, keyed by the
+/// rounded coordinate pair (`cacheKey`). Avoids re-hitting the Directions API on
+/// every render / draft reorder. Pure cache — safe to wipe (`npm run db:reset`).
+model Leg {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique
+  fromLat   Float
+  fromLng   Float
+  toLat     Float
+  toLng     Float
+  distanceM Float
+  durationS Float
+  geometry  String // JSON-encoded [lng, lat][] polyline following roads
+  createdAt DateTime @default(now())
+}
+
+/// A submitted, persisted itinerary candidate the group can rank & compare.
+/// It is a *frozen, denormalized snapshot* of the map view's draft — its stops
+/// store coordinates/status directly (no FK to Place/ItineraryStop), so an option
+/// stays stable even if the master POI list later changes. `seq` is the per-trip
+/// "#X" reference; totals are computed (real routing) at submit time and stored
+/// here so the ranking view doesn't re-fetch routes per card.
+model ItineraryOption {
+  id             String   @id @default(cuid())
+  tripId         String
+  seq            Int
+  label          String?
+  totalDistanceM Float    @default(0)
+  totalDurationS Float    @default(0)
+  createdAt      DateTime @default(now())
+
+  trip  Trip         @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  stops OptionStop[]
+
+  @@unique([tripId, seq])
+  @@index([tripId])
+}
+
+/// An ordered stop inside a saved ItineraryOption. Denormalized snapshot of a
+/// draft stop (see ItineraryOption); `status` is PLANNED | VISITED | SKIPPED.
+///
+/// A stop where we sleep in a booked hotel carries the accommodation itself:
+/// `isHotel = true`, `name`/`lat`/`lng` are the hotel's, and `nights` are the
+/// nights booked there. Keeping the hotel ON the stop (rather than in a separate
+/// date-keyed table) is what makes the schedule's drive distances/times describe
+/// the place you actually sleep — see the decisions log in CLAUDE.md.
+model OptionStop {
+  id        String  @id @default(cuid())
+  optionId  String
+  order     Int
+  name      String
+  shortName String?
+  lat       Float
+  lng       Float
+  nights       Int     @default(0)
+  bookedNights Int     @default(0)
+  status       String  @default("PLANNED")
+  /// True when this stop IS a booked accommodation.
+  isHotel      Boolean @default(false)
+  /// Hotel street address, shown on the /live card. Null for ordinary stops.
+  address      String?
+  /// Booking/reservation link.
+  url          String?
+  phone        String?
+
+  option ItineraryOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([optionId, order])
+  @@index([optionId])
+}
